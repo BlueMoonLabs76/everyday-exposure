@@ -1,0 +1,20 @@
+{
+  "name": "everyday-exposure",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A demonstration model of how often the automated license plate readers we pay for with public money record ordinary people going about their daily routine.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "fetch-data": "node src/fetch-data.js",
+    "query": "node src/query.js",
+    "heatmap": "node src/build-heatmap.js",
+    "map": "node src/build-map.js",
+    "serve": "node src/serve.js",
+    "trip": "node src/trip.js",
+    "zip-map": "node src/zip-map.js",
+    "test": "node --test \"test/*.test.js\""
+  }
+}

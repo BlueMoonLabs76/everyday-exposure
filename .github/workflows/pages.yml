@@ -1,0 +1,52 @@
+# Publishes a built map to GitHub Pages from a release, so no map data is ever committed to git.
+# Attach the map folder, zipped, to a release as map.zip (see README, "Publishing a map on GitHub Pages").
+# Runs when a release is published, or by hand from the Actions tab (it then uses the latest release).
+name: Deploy map to GitHub Pages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download map.zip from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release download $TAG --repo "${{ github.repository }}" --pattern map.zip
+
+      - name: Unzip the map
+        id: site
+        run: |
+          unzip -q map.zip -d site
+          # A zip made by right-clicking the folder holds the folder itself; find the page wherever it is.
+          page=$(find site -name index.html | head -n 1)
+          if [ -z "$page" ]; then echo "map.zip has no index.html"; exit 1; fi
+          dir=$(dirname "$page")
+          touch "$dir/.nojekyll"
+          du -sh "$dir"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.site.outputs.dir }}
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
