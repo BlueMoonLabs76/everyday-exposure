@@ -106,7 +106,20 @@ export function renderMap({ osmSnapshot, categories, states, stop }) {
   /* First-visit cards. */
   .tour { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(11,11,11,.45); }
   .tour[hidden] { display: none; }
-  .card { width: min(380px, 100%); background: var(--surface); border-radius: 14px; padding: 22px 22px 16px; box-shadow: 0 12px 40px rgba(0,0,0,.25); box-sizing: border-box; }
+  /* Cards 2 and 3 sit beside what they point at: the backdrop goes clear, a ring cut out of the dimming (.spot) marks
+     the field, and the card's arrow (--ax along its edge) points to it. */
+  .tour.anchored { background: transparent; display: block; padding: 0; }
+  .tour.anchored .card { position: fixed; width: min(320px, calc(100% - 24px)); padding: 16px 18px 12px; }
+  .tour.anchored .pic { display: none; }
+  .tour.anchored .card h2 { font-size: 18px; }
+  .spot { position: fixed; z-index: 10; border-radius: 10px; pointer-events: none; box-shadow: 0 0 0 4px #f2b33d, 0 0 0 9999px rgba(11,11,11,.45);
+    transition: all .25s ease; }
+  .spot[hidden] { display: none; }
+  .card::before { content: none; position: absolute; width: 14px; height: 14px; background: var(--surface); transform: rotate(45deg); }
+  .card.arrow-left::before { content: ''; left: -7px; top: var(--ax); margin-top: -7px; }
+  .card.arrow-down::before { content: ''; bottom: -7px; left: var(--ax); margin-left: -7px; }
+  .card.arrow-up::before { content: ''; top: -7px; left: var(--ax); margin-left: -7px; }
+  .card { position: relative; width: min(380px, 100%); background: var(--surface); border-radius: 14px; padding: 22px 22px 16px; box-shadow: 0 12px 40px rgba(0,0,0,.25); box-sizing: border-box; }
   .card .step { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; margin: 0 0 6px; }
   .card h2 { font-size: 20px; line-height: 1.25; margin: 0 0 10px; }
   .card p { font-size: 15px; line-height: 1.5; margin: 0 0 10px; color: var(--ink-2); }
@@ -147,6 +160,7 @@ export function renderMap({ osmSnapshot, categories, states, stop }) {
 <body>
 <div id="map"></div>
 <div class="hint" id="hint" role="status" hidden><span id="hint-text"></span><button type="button" id="hint-go" hidden></button></div>
+<div class="spot" id="spot" hidden></div>
 <div class="tour" id="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title" hidden>
   <div class="card">
     <p class="step" id="tour-step"></p>
@@ -602,12 +616,12 @@ const TOUR = [
   { title: 'How many cameras see your car?',
     pic: '<span>Your street</span>&rarr;<span>&#128247;</span><span>&#128247;</span>&rarr;<span>The store</span>',
     text: 'License plate cameras photograph the cars that drive past them. This map counts how many you would pass on everyday drives from your street.' },
-  { title: 'Find your street',
+  { title: 'Find your street', target: () => $('q'),
     pic: '<span>&#128269; Main Street</span>',
-    text: 'Type your street\\'s name in the search box. No house number needed. Or zoom in on the map and tap your street.' },
-  { title: 'Pick where you\\'re going',
+    text: 'Type your street\\'s name here. No house number needed. Or zoom in on the map and tap your street.' },
+  { title: 'Pick where you\\'re going', target: () => document.querySelector('.tabs'),
     pic: CONFIG.categories.map((c, i) => '<span' + (i ? '' : ' class="on"') + '>' + escapeHtml(c.label) + '</span>').join(''),
-    text: 'Choose a trip: ' + CONFIG.categories.map(c => c.label).join(', ').replace(/, ([^,]*)$/, ' or $1') +
+    text: 'Choose a trip here: ' + CONFIG.categories.map(c => c.label).join(', ').replace(/, ([^,]*)$/, ' or $1') +
       '. The colors change to show how many cameras each street passes on that drive. Tap a street to see the route and every camera on it.' },
 ];
 let tourAt = 0;
@@ -622,10 +636,55 @@ function tourShow(i) {
   $('tour-next').textContent = i === TOUR.length - 1 ? 'Show me the map' : 'Next';
   $('tour-skip').hidden = i === TOUR.length - 1;
   $('tour').hidden = false;
+  tourPlace();
   $('tour-next').focus();
 }
+// Put an anchored card beside its field: to the right when there is room (wide screens), else above it (the phone
+// sheet), else below; the ring marks the field and the arrow points at its middle.
+function tourPlace() {
+  const c = TOUR[tourAt];
+  const tour = $('tour');
+  const card = tour.querySelector('.card');
+  const spot = $('spot');
+  card.className = 'card';
+  card.style.left = card.style.top = '';
+  if (!c.target) {
+    tour.classList.remove('anchored');
+    spot.hidden = true;
+    return;
+  }
+  if (phone()) fold(true);
+  const el = c.target();
+  el.scrollIntoView({ block: 'nearest' });
+  tour.classList.add('anchored');
+  const r = el.getBoundingClientRect();
+  const pad = 6, gap = 16, edge = 12;
+  Object.assign(spot.style, { left: r.left - pad + 'px', top: r.top - pad + 'px', width: r.width + 2 * pad + 'px', height: r.height + 2 * pad + 'px' });
+  spot.hidden = false;
+  const W = window.innerWidth, H = window.innerHeight, cw = card.offsetWidth, ch = card.offsetHeight;
+  let left, top, side, ax;
+  if (W - r.right - pad - gap >= cw + edge) {
+    side = 'arrow-left';
+    left = r.right + pad + gap;
+    top = Math.max(edge, Math.min(r.top + r.height / 2 - 36, H - ch - edge));
+    ax = r.top + r.height / 2 - top;
+  } else {
+    left = Math.max(edge, Math.min(r.left + r.width / 2 - cw / 2, W - cw - edge));
+    ax = r.left + r.width / 2 - left;
+    if (r.top - pad - gap - ch >= edge) { side = 'arrow-down'; top = r.top - pad - gap - ch; }
+    else { side = 'arrow-up'; top = Math.min(r.bottom + pad + gap, H - ch - edge); }
+  }
+  ax = Math.max(18, Math.min(ax, (side === 'arrow-left' ? ch : cw) - 18));
+  card.classList.add(side);
+  card.style.left = left + 'px';
+  card.style.top = top + 'px';
+  card.style.setProperty('--ax', ax + 'px');
+}
+window.addEventListener('resize', () => { if (!$('tour').hidden) tourPlace(); });
 function tourClose() {
   $('tour').hidden = true;
+  $('tour').classList.remove('anchored');
+  $('spot').hidden = true;
   try { localStorage.setItem('ee-tour-seen', '1'); } catch (e) {}
   if (!phone()) $('q').focus();
 }
