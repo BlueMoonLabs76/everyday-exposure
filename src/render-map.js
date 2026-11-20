@@ -92,16 +92,74 @@ export function renderMap({ osmSnapshot, categories, states, stop }) {
   .toggles { display: flex; gap: 14px; margin-top: 10px; font-size: 13px; }
   ol { padding-left: 20px; margin: 4px 0; }
   .maplibregl-popup-content { font: 12px/1.35 system-ui, sans-serif; padding: 6px 9px; }
+  .head { display: flex; align-items: flex-start; gap: 8px; }
+  .head > div { flex: 1; }
+  .help { flex: none; border: 1px solid var(--hairline); background: var(--surface); color: var(--ink-2); border-radius: 999px;
+    padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  /* What the map is showing at this zoom, and the one thing to do next. */
+  .hint { position: absolute; z-index: 1; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
+    max-width: calc(100% - 120px); background: var(--ink); color: var(--surface); padding: 7px 8px 7px 14px; border-radius: 999px;
+    font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
+  .hint[hidden] { display: none; }
+  .hint button { flex: none; border: 0; border-radius: 999px; padding: 5px 12px; font: inherit; font-weight: 600; background: var(--surface); color: var(--ink); cursor: pointer; }
+  @media (min-width: 601px) { .hint { left: calc(50% + 186px); max-width: calc(100% - 460px); } }
+  /* First-visit cards. */
+  .tour { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(11,11,11,.45); }
+  .tour[hidden] { display: none; }
+  .card { width: min(380px, 100%); background: var(--surface); border-radius: 14px; padding: 22px 22px 16px; box-shadow: 0 12px 40px rgba(0,0,0,.25); box-sizing: border-box; }
+  .card .step { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; margin: 0 0 6px; }
+  .card h2 { font-size: 20px; line-height: 1.25; margin: 0 0 10px; }
+  .card p { font-size: 15px; line-height: 1.5; margin: 0 0 10px; color: var(--ink-2); }
+  .card .pic { display: flex; gap: 6px; align-items: center; justify-content: center; height: 64px; margin: 4px 0 14px; background: var(--plane); border-radius: 10px; font-size: 13px; color: var(--ink-2); }
+  .card .pic span { padding: 5px 10px; border-radius: 6px; background: var(--surface); box-shadow: 0 0 0 1px var(--ring); }
+  .card .pic span.on { background: var(--ink); color: var(--surface); box-shadow: none; }
+  .card .row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .dots { flex: 1; display: flex; gap: 6px; }
+  .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--hairline); }
+  .dots i.on { background: var(--ink); }
+  .card .skip { border: 0; background: none; color: var(--ink-2); font: inherit; font-size: 14px; padding: 10px 6px; cursor: pointer; }
+  .card .next { border: 0; background: var(--ink); color: var(--surface); font: inherit; font-size: 15px; font-weight: 600; padding: 10px 20px; border-radius: 8px; cursor: pointer; }
   @media (max-width: 600px) {
-    .panel { top: auto; bottom: 12px; max-height: 48%; }
+    /* A bottom sheet: the street search, the trip tabs and a picked street's trip first, the figures after. */
+    .panel { top: auto; bottom: 8px; left: 8px; width: calc(100% - 16px); max-height: 46%; padding: 12px 14px; display: flex; flex-direction: column; }
+    .panel > * { order: 10; flex: none; }
+    .panel > .head { order: 0; }
+    .panel > .problem { order: 1; }
+    .panel > .find { order: 2; margin-bottom: 10px; }
+    .panel > .tabs { order: 3; margin-bottom: 8px; }
+    .panel > .detail { order: 4; margin: 0 0 10px; padding: 0 0 10px; border-top: 0; border-bottom: 1px solid var(--hairline); }
+    .tagline, .intro { display: none; }
+    .tabs button { padding: 9px 4px; font-size: 13px; }
+    .hero b { font-size: 22px; }
+    .find input { font-size: 16px; }
+    .hint { top: 10px; left: 10px; right: 56px; transform: none; max-width: none; font-size: 12.5px; }
   }
 </style>
 </head>
 <body>
 <div id="map"></div>
+<div class="hint" id="hint" role="status" hidden><span id="hint-text"></span><button type="button" id="hint-go" hidden></button></div>
+<div class="tour" id="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title" hidden>
+  <div class="card">
+    <p class="step" id="tour-step"></p>
+    <h2 id="tour-title"></h2>
+    <div class="pic" id="tour-pic"></div>
+    <p id="tour-text"></p>
+    <div class="row">
+      <div class="dots" id="tour-dots"></div>
+      <button type="button" class="skip" id="tour-skip">Skip</button>
+      <button type="button" class="next" id="tour-next">Next</button>
+    </div>
+  </div>
+</div>
 <div class="panel">
-  <h1>${esc(PROJECT_NAME)}</h1>
-  <p class="tagline">${esc(TAGLINE)}</p>
+  <div class="head">
+    <div>
+      <h1>${esc(PROJECT_NAME)}</h1>
+      <p class="tagline">${esc(TAGLINE)}</p>
+    </div>
+    <button type="button" class="help" id="help">How it works</button>
+  </div>
   <p class="intro">Every street here has been checked: how many of these cameras would you pass driving to the nearest grocery store, gas station, hospital, or Waffle House? Search your street, or just click one on the map.</p>
   <p class="problem" id="problem" hidden></p>
   <div class="find">
@@ -342,6 +400,7 @@ function pick(f) {
     map.setFilter('picked-casing', ['==', ['id'], -1]);
     map.setFilter('picked-street', ['==', ['id'], -1]);
     map.getSource('picked').setData(empty);
+    hint();
     return;
   }
   const p = f.properties;
@@ -368,6 +427,9 @@ function pick(f) {
   map.getSource('picked').setData({ type: 'FeatureCollection', features: points });
   detail.innerHTML = html;
   detail.hidden = false;
+  // On a phone the trip sits just under the tabs; bring the sheet back to the top so it is in view.
+  if (phone()) document.querySelector('.panel').scrollTop = 0;
+  hint();
 }
 
 const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
@@ -422,14 +484,17 @@ map.on('mousemove', e => {
     popup.remove();
   }
 });
-// Below street zoom a street's line doesn't carry its trip, so a click zooms in to it and then opens it.
+// Below street zoom a street's line doesn't carry its trip, so a click zooms in to it and then opens it. A click on
+// the colored areas zooms in to where every street is drawn, a step at a time instead of one leap to street level.
 map.on('click', e => {
   const f = near(e.point);
   $('results').hidden = true;
   if (f && map.getZoom() >= CONFIG.streetZoom) pick(f);
   else if (f || map.queryRenderedFeatures(e.point, { layers: ['grid'] }).length) {
     popup.remove();
-    map.easeTo({ center: e.lngLat, zoom: CONFIG.streetZoom + 1 });
+    const z = map.getZoom();
+    const to = f ? CONFIG.streetZoom + 1 : Math.min(z + 3, CONFIG.localZoom + 0.5);
+    map.easeTo({ center: e.lngLat, zoom: Math.max(to, z), duration: 400 + 250 * Math.abs(to - z) });
     if (f) {
       map.once('idle', () => {
         const [g] = map.queryRenderedFeatures({ layers: ['streets'], filter: ['==', ['id'], f.id] });
@@ -522,8 +587,67 @@ $('results').addEventListener('click', e => {
   if (li) choose(Number(li.dataset.n));
 });
 
+// First-visit cards: what the map counts, how to find your street, how to pick a trip. "How it works" opens them again.
+const phone = () => window.innerWidth <= 600;
+const TOUR = [
+  { title: 'How many cameras see your car?',
+    pic: '<span>Your street</span>&rarr;<span>&#128247;</span><span>&#128247;</span>&rarr;<span>The store</span>',
+    text: 'License plate cameras photograph the cars that drive past them. This map counts how many you would pass on everyday drives from your street.' },
+  { title: 'Find your street',
+    pic: '<span>&#128269; Main Street</span>',
+    text: 'Type your street\\'s name in the search box. No house number needed. Or zoom in on the map and tap your street.' },
+  { title: 'Pick where you\\'re going',
+    pic: CONFIG.categories.map((c, i) => '<span' + (i ? '' : ' class="on"') + '>' + escapeHtml(c.label) + '</span>').join(''),
+    text: 'Choose a trip: ' + CONFIG.categories.map(c => c.label).join(', ').replace(/, ([^,]*)$/, ' or $1') +
+      '. The colors change to show how many cameras each street passes on that drive. Tap a street to see the route and every camera on it.' },
+];
+let tourAt = 0;
+function tourShow(i) {
+  tourAt = i;
+  const c = TOUR[i];
+  $('tour-step').textContent = (i + 1) + ' of ' + TOUR.length;
+  $('tour-title').textContent = c.title;
+  $('tour-pic').innerHTML = c.pic;
+  $('tour-text').textContent = c.text;
+  $('tour-dots').innerHTML = TOUR.map((_, j) => '<i' + (j === i ? ' class="on"' : '') + '></i>').join('');
+  $('tour-next').textContent = i === TOUR.length - 1 ? 'Show me the map' : 'Next';
+  $('tour-skip').hidden = i === TOUR.length - 1;
+  $('tour').hidden = false;
+  $('tour-next').focus();
+}
+function tourClose() {
+  $('tour').hidden = true;
+  try { localStorage.setItem('ee-tour-seen', '1'); } catch (e) {}
+  if (!phone()) $('q').focus();
+}
+$('tour-next').addEventListener('click', () => (tourAt < TOUR.length - 1 ? tourShow(tourAt + 1) : tourClose()));
+$('tour-skip').addEventListener('click', tourClose);
+$('tour').addEventListener('keydown', e => { if (e.key === 'Escape') tourClose(); });
+$('help').addEventListener('click', () => tourShow(0));
+let seen = false;
+try { seen = localStorage.getItem('ee-tour-seen') === '1'; } catch (e) {}
+if (!seen) tourShow(0);
+
+// The hint at the top of the map says what this zoom shows and what to do next.
+function hint() {
+  const z = map.getZoom();
+  const go = $('hint-go');
+  go.hidden = true;
+  let text = '';
+  if (z < CONFIG.localZoom) {
+    text = 'Colors show the average for the streets in each area. Zoom in to see every street.';
+    go.textContent = 'Zoom in';
+    go.hidden = false;
+  } else if (!picked) text = 'Each line is one street. Tap one to see its drive and the cameras on it.';
+  $('hint-text').textContent = text;
+  $('hint').hidden = !text;
+}
+$('hint-go').addEventListener('click', () => map.easeTo({ zoom: Math.min(map.getZoom() + 2, CONFIG.localZoom + 0.5), duration: 900 }));
+map.on('zoomend', hint);
+
 map.on('load', async () => {
   zoomNote();
+  hint();
   const [hashKey, zoom, lat, lon] = decodeURIComponent(location.hash.slice(1)).split('/');
   const k = CONFIG.categories.findIndex(c => c.key === hashKey);
   const at = [Number(zoom), Number(lat), Number(lon)];
