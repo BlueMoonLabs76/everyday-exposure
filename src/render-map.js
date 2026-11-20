@@ -4,7 +4,7 @@
 import { CORNER_CREDIT, creditHtml } from './attribution.js';
 import { COUNTED_TRIP_M, PROJECT_NAME, TAGLINE } from './config.js';
 import { DISCLAIMER } from './disclaimer.js';
-import { CAMERA_MIN_ZOOM, LOCAL_ZOOM, MIN_ZOOM, ROAD_MIN_ZOOM, STREET_ZOOM } from './map-layers.js';
+import { AREA_ZOOM, AREA_ZOOM_END, CAMERA_MIN_ZOOM, COUNTY_ZOOM, LOCAL_ZOOM, MIN_ZOOM, ROAD_MIN_ZOOM, STREET_ZOOM } from './map-layers.js';
 
 const MAPLIBRE = 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl';
 const PMTILES = 'https://cdn.jsdelivr.net/npm/pmtiles@4.5.0/dist/pmtiles.js';
@@ -24,6 +24,9 @@ export function renderMap({ osmSnapshot, categories, states, stop }) {
     localZoom: LOCAL_ZOOM,
     streetZoom: STREET_ZOOM,
     cameraMinZoom: CAMERA_MIN_ZOOM,
+    countyZoom: COUNTY_ZOOM,
+    areaZoom: AREA_ZOOM,
+    areaZoomEnd: AREA_ZOOM_END,
     limitKm: COUNTED_TRIP_M / 1000,
     limitMi: Math.round(COUNTED_TRIP_M / 1609.344),
     credit: CORNER_CREDIT,
@@ -214,7 +217,7 @@ export function renderMap({ osmSnapshot, categories, states, stop }) {
   <details id="about">
     <summary>Disclaimer and method</summary>
     ${DISCLAIMER.paragraphs.map(p => `<p class="dim small"><b>${esc(p.lead)}</b> ${esc(p.text)}</p>`).join('\n    ')}
-    <p class="dim small"><b>How trips are chosen.</b> Each colored line is one street (an OSM way). Every trip goes to the destination of its kind reached fastest, even across a state line. Grocery means one of 19 big chains, such as Kroger, Walmart, Food Lion, Giant, Aldi or Publix; dollar stores are left out. Gray roads carry no score: interstates and ramps, private roads, and streets that are not Origins. Parking aisles and driveways are not drawn. Zoomed out, each square is colored by the mean Exposure of the streets in and around it, weighted toward its own. The further out, the fewer roads are drawn: interstates stay in view across a state, and every street appears close in.</p>
+    <p class="dim small"><b>How trips are chosen.</b> Each colored line is one street (an OSM way). Every trip goes to the destination of its kind reached fastest, even across a state line. Grocery means one of 19 big chains, such as Kroger, Walmart, Food Lion, Giant, Aldi or Publix; dollar stores are left out. Gray roads carry no score: interstates and ramps, private roads, and streets that are not Origins. Parking aisles and driveways are not drawn. Zoomed all the way out, the color is each county's or independent city's mean Exposure, drawn only where its streets are. Closer in it blends into each small square's mean for the streets in and around it, weighted toward its own, and then into the streets themselves. The further out, the fewer roads are drawn: interstates stay in view across a state, and every street appears close in.</p>
     <p class="dim small"><b>Built so far:</b> ${esc(states.join(', '))} (${states.length} of ${TOTAL_STATES}). Places outside these states are blank, not zero.</p>
     <p class="dim small">${creditHtml({ osmSnapshot })}</p>
   </details>
@@ -252,7 +255,13 @@ if (location.protocol === 'file:') problem('This map cannot open from a file on 
 const key = () => CONFIG.categories[cat].key;
 const steps = expr => ['step', expr, RAMP[0], 1, RAMP[1], 2, RAMP[2], 3, RAMP[3], 4, RAMP[4], 5, RAMP[5]];
 const streetColor = k => ['case', ['<', ['get', k], 0], UNSCORED, steps(['get', k])];
-const gridColor = k => ['interpolate', ['linear'], ['get', k + '_mean'], 0, RAMP[0], 1, RAMP[1], 2, RAMP[2], 3, RAMP[3], 4, RAMP[4], 5, RAMP[5]];
+const ramp = v => ['interpolate', ['linear'], v, 0, RAMP[0], 1, RAMP[1], 2, RAMP[2], 3, RAMP[3], 4, RAMP[4], 5, RAMP[5]];
+// Far out a square takes its county's mean, which reads as calm county shapes; closer in it blends to the mean of the
+// streets in and around it, and then the streets themselves take over. Squares only exist where streets are, so
+// water and empty land stay blank. Tiles built before county means (no _area) fall back to the local mean.
+const gridColor = k => ['interpolate', ['linear'], ['zoom'],
+  CONFIG.areaZoom, ramp(['to-number', ['coalesce', ['get', k + '_area'], ['get', k + '_mean']]]),
+  CONFIG.areaZoomEnd, ramp(['get', k + '_mean'])];
 // A square fades with fewer streets in and around it, so a lone rural street is a faint dot and towns read solid. A
 // street at a square's middle weighs 36 there; three of them make it opaque.
 const gridOpacity = k => ['interpolate', ['linear'], ['get', k + '_w'], 0, 0, 108, 1];
@@ -286,7 +295,10 @@ const map = new maplibregl.Map({
       { id: 'background', type: 'background', paint: { 'background-color': '#e1ded2' } },
       { id: 'grid', type: 'fill', source: 'ee', 'source-layer': 'grid', maxzoom: CONFIG.localZoom, filter: ['has', K + '_mean'],
         paint: { 'fill-color': gridColor(K), 'fill-opacity': gridFill(K), 'fill-antialias': false } },
-      { id: 'outline', type: 'line', source: 'ee', 'source-layer': 'outline', paint: { 'line-color': '#898781', 'line-width': 1 } },
+      { id: 'counties', type: 'line', source: 'ee', 'source-layer': 'outline', minzoom: CONFIG.countyZoom, maxzoom: CONFIG.localZoom, filter: ['has', 'county'],
+        paint: { 'line-color': '#fcfcfb', 'line-width': ['interpolate', ['linear'], ['zoom'], CONFIG.countyZoom, 0.5, CONFIG.localZoom - 1, 1],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], CONFIG.countyZoom, 0.7, CONFIG.areaZoomEnd, 0.7, CONFIG.localZoom, 0] } },
+      { id: 'outline', type: 'line', source: 'ee', 'source-layer': 'outline', filter: ['!', ['has', 'county']], paint: { 'line-color': '#898781', 'line-width': 1 } },
       { id: 'roads', type: 'line', source: 'ee', 'source-layer': 'roads', minzoom: CONFIG.roadZoom,
         // Zoomed out, interstates and trunk roads are a darker gray, so they read over the grid.
         paint: { 'line-color': ['interpolate', ['linear'], ['zoom'], CONFIG.localZoom - 1, '#6f6d66', CONFIG.streetZoom, ['case', ['==', ['get', 'local'], 1], '#d9d7d0', '#b9b7ae']],
@@ -355,7 +367,9 @@ function summarize() {
 function zoomNote() {
   const z = map.getZoom();
   $('zoom-note').textContent = z < CONFIG.localZoom
-    ? 'Zoomed out, each square is colored by the mean Exposure of the streets in and around it, under the main roads. Zoom in to see every street.'
+    ? (z < CONFIG.areaZoom
+      ? 'Zoomed out, each county is colored by the mean Exposure of its streets, drawn only where streets are. Zoom in for neighborhoods, then every street.'
+      : 'Each small square is colored by the mean Exposure of the streets in and around it, under the main roads. Zoom in to see every street.')
     : z < CONFIG.streetZoom
       ? 'Each colored line is one street, colored by its own Exposure. Click one to zoom in to its trip.'
       : 'Each colored line is one street, colored by its own Exposure.';
@@ -463,7 +477,8 @@ function hover(e) {
   const p = f.properties;
   let html;
   if (f.layer.id === 'grid') {
-    html = 'Streets in and around here: mean Exposure <b>' + Number(p[k + '_mean']).toFixed(2) + '</b><br>' +
+    html = (p[k + '_area'] !== undefined && map.getZoom() < CONFIG.areaZoomEnd ? 'County average: <b>' + Number(p[k + '_area']).toFixed(2) + '</b> cameras per trip<br>' : '') +
+      'Streets in and around here: mean Exposure <b>' + Number(p[k + '_mean']).toFixed(2) + '</b><br>' +
       Math.round(100 * p[k + '_zero']) + '% pass no mapped camera &middot; ' + Number(p[k + '_n']).toLocaleString() + ' streets in this square';
   } else {
     const s = p[k];
@@ -713,7 +728,9 @@ function hint() {
   go.hidden = true;
   let text = '';
   if (z < CONFIG.localZoom) {
-    text = 'Colors show the average for the streets in each area. Zoom in to see every street.';
+    text = z < CONFIG.areaZoom
+      ? 'Colors show each county\\'s average. Zoom in for neighborhoods, then every street.'
+      : 'Colors show the average for the streets in each area. Zoom in to see every street.';
     go.textContent = 'Zoom in';
     go.hidden = false;
   } else if (!picked) text = 'Each line is one street. Tap one to see its drive and the cameras on it.';

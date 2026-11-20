@@ -18,6 +18,11 @@ export const MIN_ZOOM = 3;
 export const LOCAL_ZOOM = 11;
 export const STREET_ZOOM = 12;
 export const CAMERA_MIN_ZOOM = 6;
+// Zoomed out to here and beyond, the grid shows each county's mean (the page blends to local means by AREA_ZOOM_END)
+// and county borders are drawn from COUNTY_ZOOM until the streets take over.
+export const COUNTY_ZOOM = 6;
+export const AREA_ZOOM = 7.5;
+export const AREA_ZOOM_END = 9.5;
 export const ROAD_ZOOM = { motorway: 5, trunk: 7, primary: 8, secondary: 9, tertiary: 10 };
 export const ROAD_MIN_ZOOM = Math.min(...Object.values(ROAD_ZOOM));
 // The zoom a way is drawn from: its class's in ROAD_ZOOM, else LOCAL_ZOOM, except Local Roads that give no Origin.
@@ -40,7 +45,7 @@ const LAYER = Object.fromEntries(LAYERS.map((name, i) => [name, i]));
 const PART_POINTS = 64;
 const MAGIC = 'EETILES';
 // Bump when records change shape or content, so every state's records are written again.
-export const RECORDS_VERSION = 6;
+export const RECORDS_VERSION = 7;
 
 // Record: tileId f64, z u8, x u32, y u32, layer u8, payload length u32, payload.
 const HEAD = 22;
@@ -291,7 +296,7 @@ export function writeStateLayers(path, { store, results, stateName }) {
   const { roads, wayBox } = store;
   const keys = results.info.categories;
   const n = results.info.origins;
-  const { storeWay, lon, lat, selection } = results.arrays;
+  const { storeWay, lon, lat, selection } = results.arrays; // selection: each Origin's Selection index, or -1
   const inState = studyArea(store.state);
   const labels = placeLabels(results.info, stateName);
   const sink = new Sink();
@@ -378,15 +383,43 @@ export function writeStateLayers(path, { store, results, stateName }) {
       for (let z = MIN_ZOOM; z <= STREET_ZOOM; z++) addLine(sink, z, LAYER.outline, -1, world, noProps);
     }
   }
+  // Selection borders (counties and independent cities), drawn faintly over the zoomed-out grid.
+  const countyProps = json([['county', 1]]);
+  for (const boundary of store.selections ?? []) {
+    for (const area of areasOf(boundary)) {
+      for (const ring of [...area.outer, ...area.inner]) {
+        const world = ring.flatMap(([x, y]) => worldXY(x, y));
+        for (let z = COUNTY_ZOOM; z < LOCAL_ZOOM; z++) addLine(sink, z, LAYER.outline, -1, world, countyProps);
+      }
+    }
+  }
 
-  addGrid(sink, { lon, lat, n, keys, categories: results.categories });
+  // Each Selection's mean Exposure per category, which the zoomed-out grid shows in place of the streets' own.
+  const selections = results.info.selections?.length ?? 0;
+  const areaMeans = keys.map(k => {
+    const score = results.categories[k].score;
+    const sum = new Float64Array(selections);
+    const count = new Float64Array(selections);
+    for (let i = 0; i < n; i++) {
+      const sel = selection ? selection[i] : -1;
+      if (sel < 0 || score[i] < 0) continue;
+      sum[sel] += score[i];
+      count[sel]++;
+    }
+    return Array.from(sum, (s, j) => (count[j] ? s / count[j] : 0));
+  });
+  addGrid(sink, { lon, lat, n, keys, categories: results.categories, selection, areaMeans });
   return { ...counts, ...sink.write(path) };
 }
 
 // Grid cells at zoom z are the tiles of zoom z + GRID_BITS. Each record holds, per category, the number of Origins
 // scored in the cell, then over the cells within REACH of it weighted by KERNEL: their number, the sum of their
-// Exposures, and how many are 0. Weighted sums add across states, so merged cells are what one country build gives.
-function addGrid(sink, { lon, lat, n, keys, categories }) {
+// Exposures, how many are 0, and the sum of their Selections' mean Exposures in tenths (capped at the ramp's top,
+// AREA_CAP), so far out the page can color by county without the speckle of street-level means. Weighted sums add
+// across states, so merged cells are what one country build gives.
+const STATS = 5;
+const AREA_CAP = 5;
+function addGrid(sink, { lon, lat, n, keys, categories, selection, areaMeans }) {
   const fineZoom = LOCAL_ZOOM - 1 + GRID_BITS;
   const K = keys.length;
   let cells = new Map();
@@ -394,13 +427,15 @@ function addGrid(sink, { lon, lat, n, keys, categories }) {
     const [wx, wy] = worldXY(lon[i], lat[i]);
     const key = Math.floor(wx * 2 ** fineZoom) * 2 ** fineZoom + Math.floor(wy * 2 ** fineZoom);
     let stats = cells.get(key);
-    if (!stats) cells.set(key, (stats = new Float64Array(3 * K)));
+    if (!stats) cells.set(key, (stats = new Float64Array(4 * K)));
+    const sel = selection ? selection[i] : -1;
     keys.forEach((k, j) => {
       const s = categories[k].score[i];
       if (s < 0) return;
-      stats[3 * j]++;
-      stats[3 * j + 1] += s;
-      if (s === 0) stats[3 * j + 2]++;
+      stats[4 * j]++;
+      stats[4 * j + 1] += s;
+      if (s === 0) stats[4 * j + 2]++;
+      stats[4 * j + 3] += Math.round(10 * Math.min(AREA_CAP, sel >= 0 ? areaMeans[j][sel] : s));
     });
   }
   for (let z = LOCAL_ZOOM - 1; z >= MIN_ZOOM; z--) {
@@ -426,12 +461,14 @@ function addGrid(sink, { lon, lat, n, keys, categories }) {
           if (nx < 0 || ny < 0 || nx >= side || ny >= side) continue;
           const w = KERNEL[dy + REACH][dx + REACH];
           let into = smooth.get(nx * side + ny);
-          if (!into) smooth.set(nx * side + ny, (into = new Float64Array(4 * K)));
+          if (!into) smooth.set(nx * side + ny, (into = new Float64Array(STATS * K)));
           for (let j = 0; j < K; j++) {
-            if (!dx && !dy) into[4 * j] += stats[3 * j];
-            into[4 * j + 1] += w * stats[3 * j];
-            into[4 * j + 2] += w * stats[3 * j + 1];
-            into[4 * j + 3] += w * stats[3 * j + 2];
+            const to = STATS * j;
+            if (!dx && !dy) into[to] += stats[4 * j];
+            into[to + 1] += w * stats[4 * j];
+            into[to + 2] += w * stats[4 * j + 1];
+            into[to + 3] += w * stats[4 * j + 2];
+            into[to + 4] += w * stats[4 * j + 3];
           }
         }
       }
@@ -439,7 +476,7 @@ function addGrid(sink, { lon, lat, n, keys, categories }) {
     for (const [key, stats] of smooth) {
       const cx = Math.floor(key / side);
       const cy = key % side;
-      const o = sink.record(z, Math.floor(cx / GRID_CELLS), Math.floor(cy / GRID_CELLS), LAYER.grid, 2 + 16 * K);
+      const o = sink.record(z, Math.floor(cx / GRID_CELLS), Math.floor(cy / GRID_CELLS), LAYER.grid, 2 + 4 * STATS * K);
       sink.buf.writeUInt8(cx % GRID_CELLS, o);
       sink.buf.writeUInt8(cy % GRID_CELLS, o + 1);
       for (let j = 0; j < stats.length; j++) sink.buf.writeUInt32LE(stats[j], o + 2 + 4 * j);
@@ -498,8 +535,8 @@ export function mergeRecords(readers, writer, keys, { log = () => {} } = {}) {
         if (h.layer === LAYER.grid) {
           const cell = b[h.pos] * GRID_CELLS + b[h.pos + 1];
           let stats = grid.get(cell);
-          if (!stats) grid.set(cell, (stats = new Float64Array(4 * K)));
-          for (let j = 0; j < 4 * K; j++) stats[j] += b.readUInt32LE(h.pos + 2 + 4 * j);
+          if (!stats) grid.set(cell, (stats = new Float64Array(STATS * K)));
+          for (let j = 0; j < STATS * K; j++) stats[j] += b.readUInt32LE(h.pos + 2 + 4 * j);
         } else {
           let o = h.pos;
           const type = b[o];
@@ -522,9 +559,11 @@ export function mergeRecords(readers, writer, keys, { log = () => {} } = {}) {
       const cy = cell % GRID_CELLS;
       const props = [];
       keys.forEach((k, j) => {
-        const weight = stats[4 * j + 1];
+        const at = STATS * j;
+        const weight = stats[at + 1];
         if (!weight) return;
-        props.push([`${k}_n`, stats[4 * j]], [`${k}_w`, stats[4 * j + 1]], [`${k}_mean`, Math.round((100 * stats[4 * j + 2]) / weight) / 100], [`${k}_zero`, Math.round((100 * stats[4 * j + 3]) / weight) / 100]);
+        props.push([`${k}_n`, stats[at]], [`${k}_w`, weight], [`${k}_mean`, Math.round((100 * stats[at + 2]) / weight) / 100],
+          [`${k}_zero`, Math.round((100 * stats[at + 3]) / weight) / 100], [`${k}_area`, Math.round((10 * stats[at + 4]) / weight) / 100]);
       });
       features[LAYER.grid].push({ id: null, type: 3, geometry: rectGeometry(cx * size, cy * size, (cx + 1) * size, (cy + 1) * size), props });
     }

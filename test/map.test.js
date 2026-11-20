@@ -30,6 +30,7 @@ function build(dir) {
     cameras: [{ id: 500, lon: at(1, 0)[0], lat: LAT, tags: { operator: 'Town Police' } }],
     destinations: { grocery: [{ id: 'node/9', osmId: 9, lon: at(15, 1)[0], lat: at(15, 1)[1], name: 'Corner Market' }] },
     state: { outer: [ring], inner: [] },
+    selections: [{ name: 'Test County', kind: 'county', outer: [ring], inner: [] }],
   });
   const origins = findOrigins(store.roads, () => true);
   const results = {
@@ -119,6 +120,12 @@ test('merged records make one archive whose street tile carries the trip the pag
   const lineTile = gunzipSync(file.subarray(dataOffset + lineEntry.offset, dataOffset + lineEntry.offset + lineEntry.length)).toString('latin1');
   assert.ok(lineTile.includes('Edge Street'), 'a line carries its street name');
   assert.ok(!lineTile.includes('grocery_dest'), 'but not its trip, which waits for STREET_ZOOM');
+  const gridEntry = e.find(x => x.id === tileId(LOCAL_ZOOM - 1, Math.floor(914 / 4), Math.floor(y / 4)));
+  assert.ok(gridEntry, 'the grid tile below LOCAL_ZOOM is in the archive');
+  const gridTile = gunzipSync(file.subarray(dataOffset + gridEntry.offset, dataOffset + gridEntry.offset + gridEntry.length)).toString('latin1');
+  assert.ok(gridTile.includes('grocery_area'), 'grid squares carry their county mean for the zoomed-out view');
+  assert.ok(gridTile.includes('county'), 'and the county border is drawn there');
+  assert.ok(!lineTile.includes('county'), 'but not once every street is drawn');
 });
 
 test('street names are grouped per Selection, with the range of Exposure along them', t => {
