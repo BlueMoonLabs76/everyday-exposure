@@ -119,9 +119,17 @@ export function renderMap({ osmSnapshot, categories, states, stop }) {
   .dots i.on { background: var(--ink); }
   .card .skip { border: 0; background: none; color: var(--ink-2); font: inherit; font-size: 14px; padding: 10px 6px; cursor: pointer; }
   .card .next { border: 0; background: var(--ink); color: var(--surface); font: inherit; font-size: 15px; font-weight: 600; padding: 10px 20px; border-radius: 8px; cursor: pointer; }
+  .sheet-toggle { display: none; }
   @media (max-width: 600px) {
-    /* A bottom sheet: the street search, the trip tabs and a picked street's trip first, the figures after. */
-    .panel { top: auto; bottom: 8px; left: 8px; width: calc(100% - 16px); max-height: 46%; padding: 12px 14px; display: flex; flex-direction: column; }
+    /* A bottom sheet: the street search, the trip tabs and a picked street's trip first, the figures after. Folded (the
+       default) it shows only those; "More" opens the rest. */
+    .panel { top: auto; bottom: 8px; left: 8px; width: calc(100% - 16px); max-height: 62%; padding: 10px 12px; display: flex; flex-direction: column; }
+    .head { align-items: center; margin-bottom: 8px; }
+    h1 { font-size: 15px; }
+    .sheet-toggle { display: block; }
+    .panel.folded > :not(.head):not(.problem):not(.find):not(.tabs):not(.detail) { display: none; }
+    .panel.folded > .detail { max-height: 26vh; overflow: auto; }
+    .panel.folded .find-label { display: none; }
     .panel > * { order: 10; flex: none; }
     .panel > .head { order: 0; }
     .panel > .problem { order: 1; }
@@ -159,12 +167,13 @@ export function renderMap({ osmSnapshot, categories, states, stop }) {
       <p class="tagline">${esc(TAGLINE)}</p>
     </div>
     <button type="button" class="help" id="help">How it works</button>
+    <button type="button" class="help sheet-toggle" id="sheet-toggle" aria-expanded="false">More &#9650;</button>
   </div>
   <p class="intro">Every street here has been checked: how many of these cameras would you pass driving to the nearest grocery store, gas station, hospital, or Waffle House? Search your street, or just click one on the map.</p>
   <p class="problem" id="problem" hidden></p>
   <div class="find">
     <label class="find-label" for="q">Try your street</label>
-    <input type="search" id="q" placeholder="e.g. Main Street" autocomplete="off" aria-label="Find your street" aria-controls="results">
+    <input type="search" id="q" placeholder="Your street, e.g. Main Street" autocomplete="off" aria-label="Find your street" aria-controls="results">
     <ul class="results" id="results" role="listbox" hidden></ul>
   </div>
   <p class="sub" id="subtitle"></p>
@@ -624,6 +633,16 @@ $('tour-next').addEventListener('click', () => (tourAt < TOUR.length - 1 ? tourS
 $('tour-skip').addEventListener('click', tourClose);
 $('tour').addEventListener('keydown', e => { if (e.key === 'Escape') tourClose(); });
 $('help').addEventListener('click', () => tourShow(0));
+// On a phone the panel starts folded to the search and the trip tabs; "More" opens the figures and the method.
+const panelEl = document.querySelector('.panel');
+function fold(on) {
+  panelEl.classList.toggle('folded', on);
+  $('sheet-toggle').setAttribute('aria-expanded', String(!on));
+  $('sheet-toggle').innerHTML = on ? 'More &#9650;' : 'Less &#9660;';
+  panelEl.scrollTop = 0;
+}
+$('sheet-toggle').addEventListener('click', () => fold(!panelEl.classList.contains('folded')));
+if (phone()) fold(true);
 let seen = false;
 try { seen = localStorage.getItem('ee-tour-seen') === '1'; } catch (e) {}
 if (!seen) tourShow(0);
