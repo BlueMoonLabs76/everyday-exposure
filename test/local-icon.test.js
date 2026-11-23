@@ -27,3 +27,14 @@ test('grocery includes the Northwest chains (2026-11-23)', () => {
   assert.ok(!isGrocery({ amenity: 'fuel', brand: 'Fred Meyer' }));
   assert.ok(!isGrocery({ shop: 'supermarket', name: 'Pike Place Produce' }));
 });
+
+test('the map page names its own trips and state', async () => {
+  const { renderMap } = await import('../src/render-map.js');
+  const cats = ['grocery', 'gas', 'hospital', 'starbucks'].map(key => ({ key, label: key }));
+  const page = renderMap({ osmSnapshot: '2026-11-22T00:00:00Z', categories: cats, states: ['Washington'], stop: [] });
+  assert.match(page, /hospital, or Starbucks\?/);
+  assert.doesNotMatch(page, /Waffle House\?/);
+  assert.match(page, /<title>Everyday Exposure: Washington map<\/title>/);
+  const both = renderMap({ osmSnapshot: '2026-11-22T00:00:00Z', categories: cats, states: ['Virginia', 'Washington'], stop: [] });
+  assert.match(both, /<title>Everyday Exposure: national map<\/title>/);
+});

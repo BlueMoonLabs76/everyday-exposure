@@ -12,6 +12,9 @@ const TOTAL_STATES = 51;
 
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
+// A Destination Category as a trip's end, in running text.
+const NOUN = { grocery: 'grocery store', gas: 'gas station', hospital: 'hospital', waffle_house: 'Waffle House', starbucks: 'Starbucks' };
+
 // categories: [{ key, label }]. states: the names of the states built. stop: words the search index leaves out.
 export function renderMap({ osmSnapshot, categories, states, stop }) {
   const config = {
@@ -33,13 +36,17 @@ export function renderMap({ osmSnapshot, categories, states, stop }) {
   };
   const json = JSON.stringify(config).replace(/</g, '\\u003c');
   const tabs = categories.map((c, i) => `<button type="button" role="tab" data-cat="${i}">${esc(c.label)}</button>`).join('');
+  // "grocery store, gas station, hospital, or Waffle House": the trips this map's tabs offer.
+  const nouns = categories.map(c => NOUN[c.key] ?? c.label);
+  const trips = nouns.length > 1 ? nouns.slice(0, -1).join(', ') + ', or ' + nouns.at(-1) : nouns.join('');
+  const pageTitle = `${PROJECT_NAME}: ${states.length === 1 ? states[0] : 'national'} map`;
 
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(PROJECT_NAME)}: national map</title>
+<title>${esc(pageTitle)}</title>
 <link rel="stylesheet" href="${MAPLIBRE}.css">
 <style>
   :root {
@@ -186,7 +193,7 @@ export function renderMap({ osmSnapshot, categories, states, stop }) {
     <button type="button" class="help" id="help">How it works</button>
     <button type="button" class="help sheet-toggle" id="sheet-toggle" aria-expanded="false">More &#9650;</button>
   </div>
-  <p class="intro">Every street here has been checked: how many of these cameras would you pass driving to the nearest grocery store, gas station, hospital, or Waffle House? Search your street, or just click one on the map.</p>
+  <p class="intro">Every street here has been checked: how many of these cameras would you pass driving to the nearest ${esc(trips)}? Search your street, or just click one on the map.</p>
   <p class="problem" id="problem" hidden></p>
   <div class="find">
     <label class="find-label" for="q">Try your street</label>
