@@ -5,7 +5,7 @@
 import { access, mkdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_STATE, PIECE_BUFFERS_M, PIECE_CELL_DEG } from './config.js';
+import { CATEGORY_LABELS, categoriesFor, DEFAULT_STATE, PIECE_BUFFERS_M, PIECE_CELL_DEG } from './config.js';
 import { download, extractFileName, findState, polygonsMeetRect, usStates } from './geofabrik.js';
 import { grow } from './geo.js';
 import { cellRect, stateCells } from './heatmap.js';
@@ -53,7 +53,7 @@ for (const s of [state, ...neighbours]) {
 
 console.log('Reading …');
 const started = performance.now();
-const read = readState(extracts, { iso: state.iso, keep, log: console.log });
+const read = readState(extracts, { iso: state.iso, keep, categories: categoriesFor(slug), log: console.log });
 console.log(`  read in ${((performance.now() - started) / 1000).toFixed(1)} s, peak memory ${(process.resourceUsage().maxRSS / 1024).toFixed(0)} MB`);
 
 const inState = studyArea(read.state);
@@ -87,6 +87,7 @@ const meta = {
 await writeFile(join(dataDir, 'meta.json'), JSON.stringify(meta, null, 2));
 
 console.log(`${read.state.name} (relation ${read.state.relation}) with ${selections.length} counties and independent cities.`);
-console.log(`Saved ${meta.counts.roads} drivable roads, ${meta.counts.cameras} ALPR Cameras, ${meta.counts.grocery} grocery stores, ${meta.counts.gas} gas stations, ${meta.counts.hospital} hospitals and ${meta.counts.waffle_house} Waffle Houses near it to data/${slug}/.`);
+const local = categoriesFor(slug)[3];
+console.log(`Saved ${meta.counts.roads} drivable roads, ${meta.counts.cameras} ALPR Cameras, ${meta.counts.grocery} grocery stores, ${meta.counts.gas} gas stations, ${meta.counts.hospital} hospitals and ${meta.counts[local]} ${{ waffle_house: "Waffle Houses", starbucks: "Starbucks stores" }[local] ?? CATEGORY_LABELS[local]} near it to data/${slug}/.`);
 const days = Math.floor((Date.now() - Date.parse(read.osmSnapshot)) / 86400000);
 console.log(`OSM snapshot ${read.osmSnapshot}, ${days < 1 ? 'less than a day' : days === 1 ? '1 day' : `${days} days`} old.`);

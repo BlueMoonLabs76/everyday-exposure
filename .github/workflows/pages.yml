@@ -35,7 +35,8 @@ jobs:
         run: |
           unzip -q map.zip -d site
           # A zip made by right-clicking the folder holds the folder itself; find the page wherever it is.
-          page=$(find site -name index.html | head -n 1)
+          # A several-state zip has a page per state under the top one, so take the shallowest.
+          page=$(find site -name index.html | awk -F/ '{ print NF "\t" $0 }' | sort -n | head -n 1 | cut -f2-)
           if [ -z "$page" ]; then echo "map.zip has no index.html"; exit 1; fi
           dir=$(dirname "$page")
           touch "$dir/.nojekyll"

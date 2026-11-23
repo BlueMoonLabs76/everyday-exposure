@@ -217,7 +217,7 @@ export function renderMap({ osmSnapshot, categories, states, stop }) {
   <details id="about">
     <summary>Disclaimer and method</summary>
     ${DISCLAIMER.paragraphs.map(p => `<p class="dim small"><b>${esc(p.lead)}</b> ${esc(p.text)}</p>`).join('\n    ')}
-    <p class="dim small"><b>How trips are chosen.</b> Each colored line is one street (an OSM way). Every trip goes to the destination of its kind reached fastest, even across a state line. Grocery means one of 19 big chains, such as Kroger, Walmart, Food Lion, Giant, Aldi or Publix; dollar stores are left out. Gray roads carry no score: interstates and ramps, private roads, and streets that are not Origins. Parking aisles and driveways are not drawn. Zoomed all the way out, the color is each county's or independent city's mean Exposure, drawn only where its streets are. Closer in it blends into each small square's mean for the streets in and around it, weighted toward its own, and then into the streets themselves. The further out, the fewer roads are drawn: interstates stay in view across a state, and every street appears close in.</p>
+    <p class="dim small"><b>How trips are chosen.</b> Each colored line is one street (an OSM way). Every trip goes to the destination of its kind reached fastest, even across a state line. Grocery means one of 26 big chains, such as Kroger, Walmart, Food Lion, Publix, Fred Meyer or Safeway; dollar stores are left out. Gray roads carry no score: interstates and ramps, private roads, and streets that are not Origins. Parking aisles and driveways are not drawn. Zoomed all the way out, the color is each county's or independent city's mean Exposure, drawn only where its streets are. Closer in it blends into each small square's mean for the streets in and around it, weighted toward its own, and then into the streets themselves. The further out, the fewer roads are drawn: interstates stay in view across a state, and every street appears close in.</p>
     <p class="dim small"><b>Built so far:</b> ${esc(states.join(', '))} (${states.length} of ${TOTAL_STATES}). Places outside these states are blank, not zero.</p>
     <p class="dim small">${creditHtml({ osmSnapshot })}</p>
   </details>
@@ -236,6 +236,7 @@ const NEAREST = {
   gas: 'gas station',
   hospital: 'hospital',
   waffle_house: 'Waffle House',
+  starbucks: 'Starbucks',
 };
 const STOP = new Set(CONFIG.stop);
 const escapeHtml = s => String(s).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');

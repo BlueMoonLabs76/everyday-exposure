@@ -20,7 +20,7 @@ const args = process.argv.slice(2);
 if (args.length === 2) args.unshift(DEFAULT_STATE);
 const [stateArg, key, wayArg] = args;
 if (args.length !== 3) {
-  console.error('Usage: npm run trip -- [<state>] <grocery|gas|hospital|waffle_house> <OSM way id of the street>');
+  console.error('Usage: npm run trip -- [<state>] <grocery|gas|hospital|waffle_house|starbucks> <OSM way id of the street>');
   process.exit(1);
 }
 

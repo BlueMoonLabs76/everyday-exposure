@@ -21,7 +21,7 @@ The number of Observations accumulated along one specific path, counting only it
 _Avoid_: Exposure score, Flock Score, camera count, hits
 
 **Destination Category**:
-A kind of everyday errand destination that Exposure is measured against: grocery, gas, hospital or Waffle House. Grocery is a store of one of 19 chains, listed in `src/config.js` (ADR 0008 and its 2026-11-19 amendment). Each category produces its own independent map.
+A kind of everyday errand destination that Exposure is measured against: grocery, gas, hospital and the state's local icon. Grocery is a store of one of 26 chains, listed in `src/config.js` (ADR 0008 and its 2026-11-19 and 2026-11-23 amendments). The local icon is Waffle House, except where `src/config.js` names another for the state: Starbucks in Washington (2026-11-23), which has no Waffle House within reach. Each category produces its own independent map.
 _Avoid_: Destination type, POI type, trip purpose
 
 **Study Area**:

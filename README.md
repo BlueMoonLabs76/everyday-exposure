@@ -2,9 +2,9 @@
 
 **How often taxpayer-funded license plate readers record our daily drives.**
 
-Search your street and see how many mapped license plate reader cameras you pass on the way to the grocery store, the gas station, the hospital and the nearest Waffle House.
+Search your street and see how many mapped license plate reader cameras you pass on the way to the grocery store, the gas station, the hospital and the nearest Waffle House (in Washington, Starbucks).
 
-**Live demo (Virginia):** <https://bluemoonlabs76.github.io/everyday-exposure/>
+**Live demo:** <https://bluemoonlabs76.github.io/everyday-exposure/>, with maps of [Virginia](https://bluemoonlabs76.github.io/everyday-exposure/virginia/) and [Washington](https://bluemoonlabs76.github.io/everyday-exposure/washington/)
 
 <!-- Screenshot or GIF of the Virginia demo goes here, for example:
 ![The Virginia demo map, grocery tab, zoomed in on one city](docs/screenshot.png)
@@ -14,15 +14,15 @@ Strip location metadata (EXIF) from the image before adding it. -->
 
 A demonstration model of how often the automated license plate readers (ALPRs) we pay for with public money record ordinary people going about their daily routine.
 
-For every street in a US state, it finds the fastest drive to the nearest grocery store (one of 19 big chains, such as Kroger, Walmart, Food Lion, Giant, Aldi or Publix), gas station, hospital and Waffle House, then counts the mapped ALPR cameras each route passes within 75 feet in its first 40 km (25 miles). That count is the street's **Exposure** to that destination. Trips may cross the state line: every street is scored as one build of the whole country would score it. The result is one map of every state built so far, one tab per destination, where anyone can find their own street, and a CSV per state with a row per street.
+For every street in a US state, it finds the fastest drive to the nearest grocery store (one of 26 big chains, such as Kroger, Walmart, Food Lion, Publix, Fred Meyer or Safeway), gas station, hospital and Waffle House (Starbucks in Washington, which has none), then counts the mapped ALPR cameras each route passes within 75 feet in its first 40 km (25 miles). That count is the street's **Exposure** to that destination. Trips may cross the state line: every street is scored as one build of the whole country would score it. The result is one map of every state built so far, one tab per destination, where anyone can find their own street, and a CSV per state with a row per street.
 
-The live demo covers one state, Virginia. A map of the whole country is planned as a later release.
+The live demo covers two states, Virginia and Washington, each on its own map. A map of the whole country is planned as a later release.
 
 ## Method in brief
 
 - **Cameras:** every OpenStreetMap node tagged `man_made=surveillance` + `surveillance:type=ALPR`. Two cameras on one pole count as two.
 - **Streets:** each residential street, and each tertiary, secondary or primary road, is one starting point, scored from its midpoint. Interstates, ramps and service roads are not starting points.
-- **Destinations:** the nearest one of each kind by driving time: one of 19 grocery chains (listed in [`src/config.js`](src/config.js)), any gas station, any hospital, any Waffle House.
+- **Destinations:** the nearest one of each kind by driving time: one of 26 grocery chains (listed in [`src/config.js`](src/config.js)), any gas station, any hospital, any Waffle House (in Washington, any Starbucks instead).
 - **Route:** the fastest drive over the OpenStreetMap road network, using an assumed speed per road type.
 - **Count:** a camera counts once if the route passes within 75 feet of it, whichever way it faces. Only the first 40 km (25 miles) of the trip counts.
 
@@ -106,7 +106,8 @@ The map is a static folder (`out/map-<name>/`), so any static host that supports
 
 1. Build the map (steps 2-4 above), for example `npm run map -- --out map-virginia virginia`.
 2. Run `npm run zip-map -- virginia`. It writes `publish-virginia-map/map.zip` (the map folder plus `LICENSE-DATA`) and `virginia-exposure-csv.zip` (the data download), then reads each one back to check it.
-3. On GitHub, create a release and attach `map.zip`, and optionally the CSV zip.
+   To put several states on one site, each on its own map, name them all: `npm run zip-map -- virginia washington` writes `publish-virginia-washington-map/map.zip`, with each map in its own folder (`virginia/`, `washington/`) and a page at the top linking to them, plus a CSV zip per state. Build each state's map with its own `--out map-<state>` first. A release replaces the whole site, so name every state that should stay on it.
+3. On GitHub, create a release and attach `map.zip`, and optionally the CSV zips.
 4. Publishing the release runs the workflow, which unzips it and deploys it to GitHub Pages. In the repository's **Settings → Pages**, set **Source** to **GitHub Actions** once, before the first release.
 
 A release asset can be up to 2 GB and a Pages site up to 1 GB, so neither git's 100 MB file limit nor the repository's size is touched. Attaching the zip to a release also makes the data downloadable, as its licence asks.

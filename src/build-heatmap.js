@@ -5,14 +5,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { csvNotice } from './attribution.js';
-import { COUNTED_TRIP_M, DEFAULT_STATE, PIECE_BUFFERS_M, PIECE_CELL_DEG } from './config.js';
+import { CATEGORY_LABELS as LABELS, COUNTED_TRIP_M, DEFAULT_STATE, PIECE_BUFFERS_M, PIECE_CELL_DEG } from './config.js';
 import { findState, usStates } from './geofabrik.js';
 import { findOrigins, scoreState, stateCells } from './heatmap.js';
 import { packResults, saveResults } from './results.js';
 import { loadStore } from './store.js';
 import { studyArea } from './study-area.js';
 
-const LABELS = { grocery: 'Grocery', gas: 'Gas', hospital: 'Hospital', waffle_house: 'Waffle House' };
 const slug = (process.argv[2] ?? DEFAULT_STATE).split('/').pop().toLowerCase();
 const root = fileURLToPath(new URL('../', import.meta.url));
 const dataDir = join(root, 'data', slug);

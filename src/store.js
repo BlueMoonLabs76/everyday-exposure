@@ -6,7 +6,7 @@
 // ways, drivable and destination ways, then only the nodes those need.
 import { closeSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { DESTINATION_TAGS, HIGHWAY_CLASSES, isCamera } from './config.js';
+import { categoriesFor, DESTINATION_TAGS, HIGHWAY_CLASSES, isCamera } from './config.js';
 import { haversine } from './geo.js';
 import { direction, isDrivable, speedMps } from './network.js';
 import { NO_TAGS, openExtract, scan } from './pbf.js';
@@ -67,7 +67,8 @@ function find(ids, id) {
 // iso: the state's ISO 3166-2 code, as tagged on its boundary relation. keep(west, south, east, north): whether
 // something with that bounding box is near enough to the state to keep. log receives a line per pass.
 // Returns { osmSnapshot, roads, cameras, destinations: { category: [place] }, state, counties, skippedWays }.
-export function readState(extracts, { iso, keep, log = () => {} }) {
+// categories: the Destination Categories to collect (default: those of a state with no local icon set).
+export function readState(extracts, { iso, keep, categories = categoriesFor(), log = () => {} }) {
   const snapshots = extracts.map(e => {
     const x = openExtract(e.path);
     x.close();
@@ -86,7 +87,7 @@ export function readState(extracts, { iso, keep, log = () => {} }) {
     if (i === undefined) nameIndex.set(name, (i = names.push(name) - 1));
     return i;
   };
-  const parts = extracts.map(e => readExtract(e.path, e.own, { iso, keep, nameOf, log }));
+  const parts = extracts.map(e => readExtract(e.path, e.own, { iso, keep, categories, nameOf, log }));
   const own = parts[extracts.findIndex(e => e.own)];
 
   // Each way once, in id order: extracts overlap at their edges, and a way in two of them is the same way.
@@ -144,7 +145,7 @@ export function readState(extracts, { iso, keep, log = () => {} }) {
 
   const unique = (lists, keyOf) => [...new Map(lists.flat().map(x => [keyOf(x), x])).values()];
   const cameras = unique(parts.map(p => p.cameras), c => c.id).sort((a, b) => a.id - b.id);
-  const destinations = Object.fromEntries(Object.keys(DESTINATION_TAGS).map(c => [
+  const destinations = Object.fromEntries(categories.map(c => [
     c,
     unique(parts.map(p => p.destinations[c]), d => d.id).sort((a, b) => TYPE_RANK[a.type] - TYPE_RANK[b.type] || a.osmId - b.osmId),
   ]));
@@ -160,7 +161,7 @@ export function readState(extracts, { iso, keep, log = () => {} }) {
   };
 }
 
-function readExtract(path, own, { iso, keep, nameOf, log }) {
+function readExtract(path, own, { iso, keep, categories, nameOf, log }) {
   const extract = openExtract(path);
   try {
     const pass = (label, visit) => {
@@ -168,7 +169,6 @@ function readExtract(path, own, { iso, keep, nameOf, log }) {
       scan(extract, visit);
       log(`  ${basename(path)}, ${label}: ${((performance.now() - start) / 1000).toFixed(1)} s`);
     };
-    const categories = Object.keys(DESTINATION_TAGS);
     const categoriesOf = tags => categories.filter(c => DESTINATION_TAGS[c](tags));
 
     // 1. The state's boundary and its counties (own extract only), and destinations mapped as relations.

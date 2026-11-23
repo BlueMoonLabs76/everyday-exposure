@@ -63,10 +63,15 @@ export const GEOFABRIK_INDEX = 'https://download.geofabrik.de/index-v1.json';
 // Widened 2026-11-19 (user) with the big Virginia/Mid-Atlantic chains, which the original list missed:
 // Food Lion through Publix and Wegmans, plus IGA, Save-A-Lot and Weis for rural areas. Martin's is Giant's sister
 // brand. Dollar stores are left out on purpose: they get many quick trips but a small share of food spending.
-const GROCERY_CHAIN = /\b(kroger|wal-?mart|harp['’]?s|aldi|brookshire['’]s|piggly wiggly|super (1|one) foods|food lion|giant( food)?|martin['’]?s|harris teeter|lidl|safeway|food city|publix|wegmans|weis|iga|save[- ]?a[- ]?lot)\b/i;
+// Widened 2026-11-23 (user) with the big Washington/Northwest chains: Fred Meyer and QFC (Kroger's Northwest brands,
+// which don't carry the Kroger name), Albertsons, WinCo, Haggen, Yoke's and Rosauers.
+const GROCERY_CHAIN = /\b(kroger|wal-?mart|harp['’]?s|aldi|brookshire['’]s|piggly wiggly|super (1|one) foods|food lion|giant( food)?|martin['’]?s|harris teeter|lidl|safeway|food city|publix|wegmans|weis|iga|save[- ]?a[- ]?lot|fred meyer|qfc|quality food cent(er|re)s?|albertsons|winco( foods)?|haggen|yoke['’]?s|rosauers)\b/i;
 const brandOrName = tags => `${tags.brand ?? ''} ${tags.name ?? ''}`;
 // The brand, or a name that starts with it: "Colonial Pancake & Waffle House" is not one.
 const isWaffleHouse = tags => [tags.brand, tags.name].some(s => /^waffle house\b/i.test(s ?? ''));
+// The brand, or a name that starts with it. A cafe, not a Starbucks counter tagged inside a grocery store's building
+// as a shop. Licensed counters mapped as their own cafe still count: they are still a Starbucks trip.
+const isStarbucks = tags => [tags.brand, tags.name].some(s => /^starbucks\b/i.test(s ?? ''));
 
 // Destination Category tag rules.
 export const DESTINATION_TAGS = {
@@ -74,7 +79,15 @@ export const DESTINATION_TAGS = {
   gas: tags => tags.amenity === 'fuel',
   hospital: tags => tags.amenity === 'hospital' || tags.healthcare === 'hospital',
   waffle_house: tags => /^(restaurant|fast_food)$/.test(tags.amenity ?? '') && isWaffleHouse(tags),
+  starbucks: tags => /^(cafe|fast_food)$/.test(tags.amenity ?? '') && isStarbucks(tags),
 };
+
+// The fourth Destination Category is a state's own cliché errand (user, 2026-11-23): Waffle House by default, and
+// Starbucks in Washington, which has no Waffle House within reach.
+const LOCAL_ICON = { washington: 'starbucks' };
+export const categoriesFor = slug => ['grocery', 'gas', 'hospital', LOCAL_ICON[slug] ?? 'waffle_house'];
+
+export const CATEGORY_LABELS = { grocery: 'Grocery', gas: 'Gas', hospital: 'Hospital', waffle_house: 'Waffle House', starbucks: 'Starbucks' };
 
 export const isCamera = tags => tags.man_made === 'surveillance' && tags['surveillance:type'] === 'ALPR';
 
